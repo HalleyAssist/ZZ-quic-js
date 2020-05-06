@@ -1,0 +1,128 @@
+/// <reference types="node" />
+import { EventEmitter } from 'events';
+import { Offset, SessionType, StreamID, PacketNumber, ConnectionID, SocketAddress } from './internal/protocol';
+import { kID, kFC, kHS, kRTT, kStreams, kSocket, kState, kType, kVersion, kACKHandler, kNextStreamID, kNextPacketNumber, kIntervalCheck, kUnackedPackets } from './internal/symbol';
+import { Frame, StreamFrame, RstStreamFrame, AckFrame, WindowUpdateFrame, StopWaitingFrame, BlockedFrame } from './internal/frame';
+import { Packet, RegularPacket } from './internal/packet';
+import { QUICError } from './internal/error';
+import { ConnectionFlowController } from './internal/flowcontrol';
+import { RTTStats } from './internal/congestion';
+import { BufferVisitor, Queue } from './internal/common';
+import { Socket } from './socket';
+import { Stream, SessionRef } from './stream';
+import { HandShake } from './handshake';
+export declare interface Session {
+    addListener(event: "error", listener: (err: Error) => void): this;
+    addListener(event: "goaway", listener: (err: QUICError) => void): this;
+    addListener(event: "close", listener: (err?: Error) => void): this;
+    addListener(event: "timeout", listener: () => void): this;
+    addListener(event: "stream", listener: (stream: Stream) => void): this;
+    emit(event: "error", err: Error): boolean;
+    emit(event: "goaway", err: QUICError): boolean;
+    emit(event: "close", err?: Error): boolean;
+    emit(event: "timeout"): boolean;
+    emit(event: "stream", stream: Stream): boolean;
+    on(event: "error", listener: (err: Error) => void): this;
+    on(event: "goaway", listener: (err: QUICError) => void): this;
+    on(event: "close", listener: (err?: Error) => void): this;
+    on(event: "timeout", listener: () => void): this;
+    on(event: "stream", listener: (stream: Stream) => void): this;
+    once(event: "error", listener: (err: Error) => void): this;
+    once(event: "goaway", listener: (err: QUICError) => void): this;
+    once(event: "close", listener: (err?: Error) => void): this;
+    once(event: "timeout", listener: () => void): this;
+    once(event: "stream", listener: (stream: Stream) => void): this;
+}
+export declare class Session extends EventEmitter implements SessionRef {
+    [kID]: ConnectionID;
+    [kType]: SessionType;
+    [kIntervalCheck]: NodeJS.Timer | null;
+    [kStreams]: Map<number, Stream>;
+    [kNextStreamID]: StreamID;
+    [kState]: SessionState;
+    [kACKHandler]: ACKHandler;
+    [kSocket]: Socket<Session> | null;
+    [kVersion]: string;
+    [kNextPacketNumber]: PacketNumber;
+    [kUnackedPackets]: Queue<RegularPacket>;
+    [kRTT]: RTTStats;
+    [kFC]: ConnectionFlowController;
+    [kHS]: HandShake;
+    constructor(id: ConnectionID, type: SessionType);
+    readonly id: string;
+    readonly version: string;
+    readonly isClient: boolean;
+    readonly destroyed: boolean;
+    readonly localAddr: {
+        address: string;
+        family: string;
+        port: number;
+        socketAddress: SocketAddress | null;
+    };
+    readonly remoteAddr: {
+        address: string;
+        family: string;
+        port: number;
+        socketAddress: SocketAddress | null;
+    };
+    readonly _stateMaxPacketSize: number;
+    timeout: number;
+    readonly lastNetworkActivityTime: number | undefined;
+    _stateDecreaseStreamCount(): void;
+    _newRegularPacket(): RegularPacket;
+    _sendFrame(frame: Frame, callback?: (...args: any[]) => void): void;
+    _sendStopWaitingFrame(leastUnacked: number): void;
+    _retransmit(frame: AckFrame, rcvTime: number): number;
+    _sendPacket(packet: Packet, callback?: (...args: any[]) => void): void;
+    _sendWindowUpdate(offset: Offset, streamID?: StreamID): void;
+    _trySendAckFrame(): void;
+    _handleRegularPacket(packet: RegularPacket, rcvTime: number, bufv: BufferVisitor): void;
+    _handleStreamFrame(frame: StreamFrame, rcvTime: number): void;
+    _handleRstStreamFrame(frame: RstStreamFrame, rcvTime: number): void;
+    _handleACKFrame(frame: AckFrame, rcvTime: number): void;
+    _handleStopWaitingFrame(frame: StopWaitingFrame): void;
+    _handleWindowUpdateFrame(frame: WindowUpdateFrame): void;
+    _handleBlockedFrame(frame: BlockedFrame, rcvTime: number): void;
+    _intervalCheck(time: number): void;
+    request(options?: any): Stream;
+    goaway(err: any): Promise<void>;
+    ping(): Promise<void>;
+    close(err?: any): Promise<void>;
+    reset(_err: any): Promise<void>;
+    destroy(err: any): void;
+}
+export declare class SessionState {
+    localFamily: string;
+    localAddress: string;
+    localPort: number;
+    localAddr: SocketAddress | null;
+    remoteFamily: string;
+    remoteAddress: string;
+    remotePort: number;
+    remoteAddr: SocketAddress | null;
+    maxPacketSize: number;
+    bytesRead: number;
+    bytesWritten: number;
+    idleTimeout: number;
+    liveStreamCount: number;
+    lastNetworkActivityTime?: number;
+    startTime: number;
+    destroyed: boolean;
+    shutdown: boolean;
+    shuttingDown: boolean;
+    versionNegotiated: boolean;
+    keepAlivePingSent: boolean;
+    constructor();
+}
+export declare class ACKHandler {
+    misshit: number;
+    lowestAcked: number;
+    largestAcked: number;
+    numbersAcked: number[];
+    largestAckedTime: number;
+    lastAckedTime: number;
+    constructor();
+    lowest(packetNumber: number): void;
+    ack(packetNumber: number, rcvTime: number, needAck: boolean): boolean;
+    toFrame(): AckFrame | null;
+}
